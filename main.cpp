@@ -7,6 +7,10 @@
 #include <fstream>
 #include <numeric>
 #include <iomanip>
+#include <chrono> 
+
+int maxPOP = 0;
+const int LIMIT_POP = 200;
 
 std::random_device rd;
 std::mt19937 e2(rd());
@@ -34,12 +38,13 @@ double mutation_probability, crossover_probability;
 double selection_pressure = 1;
 const int ELITISM = 25;
 double best_solution = FLT_MAX;
+double previous_best_solution = 0;
 
 
 struct Cromozom
 {
     vector<double> real_values;
-    double fitness, evaluation, accumulated;
+    double  evaluation;
     vector<bool> bits;
 
     Cromozom()
@@ -91,8 +96,14 @@ void generate_population_bits()
     }
 }
 
+void sort_by_evaluation()
+{
+	 std::sort(population.begin(), population.end(), [](Cromozom a, Cromozom b) {
+			 return a.evaluation < b.evaluation;
+		 });
+}
 
-void evaluate_fitness()
+void evaluate_population()
 {
     minimum_evaluation = FLT_MAX;
     double maximum_evaluation = FLT_MIN;
@@ -111,30 +122,11 @@ void evaluate_fitness()
         maximum_evaluation = std::max(population[i].evaluation, maximum_evaluation);
     }
     best_solution = minimum_evaluation;
-
-    double total_fitness = 0;
-    
-    for (int i = 0; i < population.size(); i++)
-    {
-        population[i].fitness = (maximum_evaluation - population[i].evaluation) / (maximum_evaluation - minimum_evaluation + 0.00001);
-        total_fitness += population[i].fitness;
-    }
-    population[0].accumulated = population[0].fitness/total_fitness;
-    for (int i = 1; i < population.size(); i++)
-    {
-        population[i].accumulated = population[i - 1].accumulated + population[i].fitness/total_fitness;
-    }
-    population[population.size() - 1].accumulated = 1;
-
-     std::sort(population.begin(), population.end(), [](Cromozom a, Cromozom b) {
-        return a.evaluation < b.evaluation;
-     });
-
 }
 
 void mutation()
 {
-    for (int i = 0; i < population_size; i++)
+    for (int i = 0; i < population_size && population.size() < LIMIT_POP; i++)
     {
         for (int j = ELITISM; j < dimension_length; j++)
             if (unif_random() <= mutation_probability)
@@ -151,7 +143,7 @@ void crossover()
     int initial_size = population.size();
     bool found = false;
     int prevIndex = 0;
-    for (int i = ELITISM; i < initial_size; i++)
+    for (int i = ELITISM; i < initial_size && population.size() < LIMIT_POP; i++)
     {
         if (unif_random() <= crossover_probability)
         {
@@ -186,25 +178,53 @@ void crossover()
 
 void selection()
 {
-    auto new_population = vector<Cromozom>(population_size);
-   
+    //debug purpose
+    if (population.size() > maxPOP)
+        maxPOP = population.size();
+
+    auto new_population = vector<Cromozom>();
+    new_population.reserve(population_size);
+
     for (int i = 0; i < ELITISM; i++)
-        new_population[i] = population[i];
-    
-    int index_new = ELITISM;
-    for (int i = ELITISM; i < population_size; i++)
-    {
-        double rnd = unif_random();
-        for(int j = 0; j < population.size();j++)
-            if (rnd < population[j].accumulated)
-            {
-                new_population[index_new++] = population[i];
-                break;
-            }
-    }
+        new_population.push_back(population[i]);
+    population.erase(population.begin(), population.begin() + ELITISM);
+
    
+    double min_evaluation = FLT_MAX;
+    for (auto x : population)
+       min_evaluation = std::min(min_evaluation, x.evaluation);
+
+    auto fitness = vector<double>(population.size());
+    double total_fitness = 0;
+
+    for (int i = 0; i < population.size(); i++)
+    {
+        fitness[i] = population[i].evaluation - min_evaluation + 0.0001;
+        total_fitness += fitness[i];
+    }
+
+    auto accumulated = vector<double>(population.size());
+    accumulated[0] = 0;
+    for (int i = 1; i < population.size(); i++)
+        accumulated[i] = accumulated[i - 1] + fitness[i] / total_fitness;
+    accumulated[population.size() - 1] = 1;
+
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::shuffle(population.begin(), population.end(), std::default_random_engine(seed));
+
+    for (int i = 0; new_population.size() < population_size; i++)
+    {
+        double rd = dist(e2);
+        for (int j = 0; j < population.size(); j++)
+        {
+            if (accumulated[j] < rd && rd <= accumulated[j + 1])
+                new_population.push_back(population[j]);
+        }
+    }
+
     population = new_population;
-    if (new_population.size() != population_size)
+    std::shuffle(population.begin(), population.end(), std::default_random_engine(seed));
+    if (population.size() != population_size)
         throw std::invalid_argument("Noua populatie trebuie sa aiba un nr identic de indivizi.");
 }
 
@@ -213,16 +233,20 @@ double genetic_algoritm()
 {
     generate_population_bits();
     
-    for (int i = 0; i < T; i++)
+    int i = 0;
+    for (; i < T; i++)
     {
+        previous_best_solution = best_solution;
         minimum_evaluation = FLT_MAX;
-        evaluate_fitness();
+
+        evaluate_population();
+        sort_by_evaluation();
         selection();
-        evaluate_fitness();
+        sort_by_evaluation();
         mutation();
         crossover();
     }
-        std::cout << "Minimul este " << minimum_evaluation <<"\n";
+        std::cout << "Minimul este " << minimum_evaluation << " in " << i << " generatii\n";
         std::cout << "Evaluarea minima gasita in toate generatiile: " << best_solution << "\n\n";
    return minimum_evaluation;
 }
@@ -248,7 +272,9 @@ double init_genetic(int _dimensions, int _math_func, int _precision, int _popula
 
     translate_space = (b - a) / (pow(2, dimension_length) - 1);
     population = vector<Cromozom>(population_size, Cromozom());
+
     minimum_evaluation = FLT_MAX;
+    previous_best_solution = 0;
 
     return genetic_algoritm();
 }
@@ -281,16 +307,16 @@ void GA()
             std::cout << "\n------------------------------------------- Dimensiuni "<<dims[i] << "\n";
 
 			std::cout << "\Rastrigin\n";
-			rastrigin << init_genetic(dims[i], RASTRIGIN, 5, 200, 2000, 0.4) << "\n";
+			rastrigin << init_genetic(dims[i], RASTRIGIN, 5, 150, 2000, 0.4) << "\n";
 
 			std::cout << "\nMichalewics\n";
-			michalewics << init_genetic(dims[i], MICHALEWICS, 5, 200, 2000, 0.4) << "\n ";
+			michalewics << init_genetic(dims[i], MICHALEWICS, 5, 150, 2000, 0.4) << "\n ";
 
 			std::cout << "\nDeJong\n";
-            dejong << init_genetic(dims[i], DE_JONG, 5, 200, 2000, 0.4) << "\n";
+            dejong << init_genetic(dims[i], DE_JONG, 5, 150, 2000, 0.4) << "\n";
 
 			std::cout << "\nSchwefel\n";
-			schwefel << init_genetic(dims[i], SCHWEFEL, 5, 200, 2000, 0.8) << "\n";
+			schwefel << init_genetic(dims[i], SCHWEFEL, 5, 150, 2000, 0.4) << "\n";
         }
     }
 }
@@ -304,9 +330,6 @@ int main()
 {
     srand((unsigned)time(NULL));
 
-    int which;
-    std::cout << "Alege care varianta de algoritm folosesti (0 sau 1)\n";
-    std::cin >> which;
-    if (which == 0) GA();
-    else META_GA();
+    GA();
+    std::cout << "POP MAXIMA ATINSA ESTE :" << maxPOP;
 }
