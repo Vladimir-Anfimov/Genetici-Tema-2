@@ -8,6 +8,8 @@
 #include <numeric>
 #include <iomanip>
 #include <chrono> 
+#include <unordered_set>
+#include <utility>
 
 int maxPOP = 0;
 const int LIMIT_POP = 200;
@@ -21,6 +23,8 @@ double unif_random() {
 }
 
 using std::vector;
+using std::pair;
+using std::unordered_set;
 
 int population_size = 0;
 int dimensions = 0;
@@ -39,6 +43,8 @@ double selection_pressure = 1;
 const int ELITISM = 25;
 double best_solution = FLT_MAX;
 double previous_best_solution = 0;
+
+const int POPULATION_STABLE = 120;
 
 
 struct Cromozom
@@ -175,55 +181,37 @@ void crossover()
     }
 }
 
-
 void selection()
 {
     //debug purpose
     if (population.size() > maxPOP)
         maxPOP = population.size();
+    //---
 
     auto new_population = vector<Cromozom>();
     new_population.reserve(population_size);
 
     for (int i = 0; i < ELITISM; i++)
         new_population.push_back(population[i]);
-    population.erase(population.begin(), population.begin() + ELITISM);
 
-   
-    double min_evaluation = FLT_MAX;
-    for (auto x : population)
-       min_evaluation = std::min(min_evaluation, x.evaluation);
+    auto random_positioned_indexes = vector<int>(population.size() - ELITISM);
 
-    auto fitness = vector<double>(population.size());
-    double total_fitness = 0;
-
-    for (int i = 0; i < population.size(); i++)
-    {
-        fitness[i] = population[i].evaluation - min_evaluation + 0.0001;
-        total_fitness += fitness[i];
-    }
-
-    auto accumulated = vector<double>(population.size());
-    accumulated[0] = 0;
-    for (int i = 1; i < population.size(); i++)
-        accumulated[i] = accumulated[i - 1] + fitness[i] / total_fitness;
-    accumulated[population.size() - 1] = 1;
+    for (int i = 0; i < population.size() - ELITISM; i++)
+        random_positioned_indexes[i] = i;
 
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-    std::shuffle(population.begin(), population.end(), std::default_random_engine(seed));
 
-    for (int i = 0; new_population.size() < population_size; i++)
+    shuffle(random_positioned_indexes.begin(), random_positioned_indexes.end(), std::default_random_engine(seed));
+
+    for (int i=0;i<population.size() - ELITISM; i = i + 2)
     {
-        double rd = dist(e2);
-        for (int j = 0; j < population.size(); j++)
-        {
-            if (accumulated[j] < rd && rd <= accumulated[j + 1])
-                new_population.push_back(population[j]);
-        }
+        if (population[random_positioned_indexes[i]].evaluation < population[random_positioned_indexes[i + 1]].evaluation || unif_random() < 0.01)
+            new_population.push_back(population[random_positioned_indexes[i]]);
+        else
+            new_population.push_back(population[random_positioned_indexes[i+1]]);
     }
-
+      
     population = new_population;
-    std::shuffle(population.begin(), population.end(), std::default_random_engine(seed));
     if (population.size() != population_size)
         throw std::invalid_argument("Noua populatie trebuie sa aiba un nr identic de indivizi.");
 }
@@ -241,10 +229,11 @@ double genetic_algoritm()
 
         evaluate_population();
         sort_by_evaluation();
-        selection();
-        sort_by_evaluation();
         mutation();
         crossover();
+        evaluate_population();
+        sort_by_evaluation();
+        selection();
     }
         std::cout << "Minimul este " << minimum_evaluation << " in " << i << " generatii\n";
         std::cout << "Evaluarea minima gasita in toate generatiile: " << best_solution << "\n\n";
@@ -307,16 +296,16 @@ void GA()
             std::cout << "\n------------------------------------------- Dimensiuni "<<dims[i] << "\n";
 
 			std::cout << "\Rastrigin\n";
-			rastrigin << init_genetic(dims[i], RASTRIGIN, 5, 150, 2000, 0.4) << "\n";
+			rastrigin << init_genetic(dims[i], RASTRIGIN, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
 
 			std::cout << "\nMichalewics\n";
-			michalewics << init_genetic(dims[i], MICHALEWICS, 5, 150, 2000, 0.4) << "\n ";
+			michalewics << init_genetic(dims[i], MICHALEWICS, 5, POPULATION_STABLE, 2000, 0.4) << "\n ";
 
 			std::cout << "\nDeJong\n";
-            dejong << init_genetic(dims[i], DE_JONG, 5, 150, 2000, 0.4) << "\n";
+            dejong << init_genetic(dims[i], DE_JONG, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
 
 			std::cout << "\nSchwefel\n";
-			schwefel << init_genetic(dims[i], SCHWEFEL, 5, 150, 2000, 0.4) << "\n";
+			schwefel << init_genetic(dims[i], SCHWEFEL, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
         }
     }
 }
