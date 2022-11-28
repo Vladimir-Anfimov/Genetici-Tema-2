@@ -40,11 +40,11 @@ double minimum_evaluation;
 int T;
 double mutation_probability, crossover_probability;
 double selection_pressure = 1;
-const int ELITISM = 25;
+const int ELITISM = 100;
 double best_solution = FLT_MAX;
 double previous_best_solution = 0;
 
-const int POPULATION_STABLE = 120;
+const int POPULATION_STABLE = 150;
 
 
 struct Cromozom
@@ -132,9 +132,9 @@ void evaluate_population()
 
 void mutation()
 {
-    for (int i = 0; i < population_size && population.size() < LIMIT_POP; i++)
+    for (int i = ELITISM; i < population_size && population.size() < LIMIT_POP; i++)
     {
-        for (int j = ELITISM; j < dimension_length; j++)
+        for (int j = 0; j < dimension_length; j++)
             if (unif_random() <= mutation_probability)
             {
 				population[i].bits[j] = !population[i].bits[j];
@@ -188,30 +188,8 @@ void selection()
         maxPOP = population.size();
     //---
 
-    auto new_population = vector<Cromozom>();
-    new_population.reserve(population_size);
+    population.erase(population.begin() + population_size, population.end());
 
-    for (int i = 0; i < ELITISM; i++)
-        new_population.push_back(population[i]);
-
-    auto random_positioned_indexes = vector<int>(population.size() - ELITISM);
-
-    for (int i = 0; i < population.size() - ELITISM; i++)
-        random_positioned_indexes[i] = i;
-
-    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-
-    shuffle(random_positioned_indexes.begin(), random_positioned_indexes.end(), std::default_random_engine(seed));
-
-    for (int i=0;i<population.size() - ELITISM; i = i + 2)
-    {
-        if (population[random_positioned_indexes[i]].evaluation < population[random_positioned_indexes[i + 1]].evaluation || unif_random() < 0.01)
-            new_population.push_back(population[random_positioned_indexes[i]]);
-        else
-            new_population.push_back(population[random_positioned_indexes[i+1]]);
-    }
-      
-    population = new_population;
     if (population.size() != population_size)
         throw std::invalid_argument("Noua populatie trebuie sa aiba un nr identic de indivizi.");
 }
@@ -234,6 +212,8 @@ double genetic_algoritm()
         evaluate_population();
         sort_by_evaluation();
         selection();
+
+
     }
         std::cout << "Minimul este " << minimum_evaluation << " in " << i << " generatii\n";
         std::cout << "Evaluarea minima gasita in toate generatiile: " << best_solution << "\n\n";
@@ -296,24 +276,21 @@ void GA()
             std::cout << "\n------------------------------------------- Dimensiuni "<<dims[i] << "\n";
 
 			std::cout << "\Rastrigin\n";
-			rastrigin << init_genetic(dims[i], RASTRIGIN, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
+			rastrigin << std::setprecision(5) << init_genetic(dims[i], RASTRIGIN, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
 
 			std::cout << "\nMichalewics\n";
-			michalewics << init_genetic(dims[i], MICHALEWICS, 5, POPULATION_STABLE, 2000, 0.4) << "\n ";
+			michalewics << std::setprecision(5)<< init_genetic(dims[i], MICHALEWICS, 5, POPULATION_STABLE, 2000, 0.4) << "\n ";
 
 			std::cout << "\nDeJong\n";
-            dejong << init_genetic(dims[i], DE_JONG, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
+            dejong << std::setprecision(5)<<init_genetic(dims[i], DE_JONG, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
 
 			std::cout << "\nSchwefel\n";
-			schwefel << init_genetic(dims[i], SCHWEFEL, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
+			schwefel <<std::setprecision(5) << init_genetic(dims[i], SCHWEFEL, 5, POPULATION_STABLE, 2000, 0.4) << "\n";
+
         }
     }
 }
 
-
-void META_GA()
-{
-}
 
 int main()
 {
